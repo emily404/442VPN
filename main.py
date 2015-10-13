@@ -7,7 +7,6 @@ from kivy.uix.button import Button
 from kivy.uix.textinput import TextInput
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.boxlayout import BoxLayout
 
 class InitScreen(FloatLayout):
 
