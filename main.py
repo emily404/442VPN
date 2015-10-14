@@ -47,6 +47,7 @@ class InitScreen(FloatLayout):
 
         self.server_button = server_button
         self.send_data_button = send_data_button
+        self.open_connection_button = open_connection_button
 
         # bind event handlers
         open_connection_button.bind(on_press=partial(self.connectionPrompt))
@@ -89,12 +90,16 @@ class InitScreen(FloatLayout):
 
         #todo: mutual authentication here?
 
-        self.send_data_button.disabled = False   
+        self.send_data_button.disabled = False  
+        self.open_connection_button.disabled = True 
 
     def closeConnection(self, obj):
         self.socket.close()
+        
         self.send_data_button.disabled = True
         self.data_to_send.text = ''
+
+        self.open_connection_button.disabled = False
 
     def sendData(self, obj):
         #todo: encryption here?
