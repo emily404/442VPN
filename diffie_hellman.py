@@ -1,16 +1,5 @@
 import random
-import math
-
-def genPrime():
-	p = random.randint(2**1000, 2**1002)
-	n = 2
-	while n < math.ceil(p ** 0.5):
-		if p % n == 0:
-			return 0
-	return p 
-
-		 
-
+		
 # public key exchange using the Diffie-Hellman algorithm
 # two parties each pick secret random integer a and b and publicly decide base b and modulo p coprime to b
 # session key is generated as b^ab mod p
@@ -18,9 +7,10 @@ def genPrime():
 # take the half keys and take it to the power of b or a respectively to get b^ab mod p
 class DiffieHellman:
 
-
 	SECRET_MAX_VAL = pow(2, 10)
 	SECRET_MIN_VAL = pow(2, 0)
+
+	DEFAULT_PRIME = 160397022681332837982501360622187903385636099663926916987196394082067610996409020846117501020097391882057277902529677187331483396135478323546135349929127937237820770355298238213254789834673504654412980000535281273079087527379521206298312003725496496456835503279237143483535191480253697768641165270168873
 
 	def __init__(self, modulo, base):
 		self.modulo = modulo
@@ -28,9 +18,9 @@ class DiffieHellman:
 		# self.SECRET_MAX_VAL 
 		# self.SECRET_MIN_VAL 
 
-
-
-
+	@classmethod
+	def defaultInstance(self):
+		return self(DEFAULT_PRIME, 2)
 
 # generate a new secret, 
 	def genSecret(self):
