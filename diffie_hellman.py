@@ -1,5 +1,15 @@
 import random
+import math
 
+def genPrime():
+	p = random.randint(2**1000, 2**1002)
+	n = 2
+	while n < math.ceil(p ** 0.5):
+		if p % n == 0:
+			return 0
+	return p 
+
+		 
 
 # public key exchange using the Diffie-Hellman algorithm
 # two parties each pick secret random integer a and b and publicly decide base b and modulo p coprime to b
@@ -17,6 +27,10 @@ class DiffieHellman:
 		self.base = base
 		# self.SECRET_MAX_VAL 
 		# self.SECRET_MIN_VAL 
+
+
+
+
 
 # generate a new secret, 
 	def genSecret(self):
