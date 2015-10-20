@@ -13,6 +13,7 @@ from kivy.uix.popup import Popup
 from functools import partial
 import socket
 import sys
+import threading
 
 class InitScreen(FloatLayout):
 
@@ -54,6 +55,7 @@ class InitScreen(FloatLayout):
         close_connection_button.bind(on_press=self.closeConnection)
         send_data_button.bind(on_press=self.sendData)
 
+
     
     def connectionPrompt(self, obj):
         prompt    = BoxLayout(size=(250,250),orientation="vertical",spacing=20,padding=20)
@@ -69,6 +71,7 @@ class InitScreen(FloatLayout):
         prompt.add_widget(self.port_input)
 
         connect_button = Button(text='Connect',size_hint=(.4,.1),pos_hint={'right':.7})
+        self.connect_button= connect_button
         prompt.add_widget(connect_button)
 
         popup = Popup(title='Connect',content=prompt, size_hint=(.5,.5)) 
@@ -77,21 +80,38 @@ class InitScreen(FloatLayout):
 
         connect_button.bind(on_press=self.connect)
 
-
-    def connect(self, obj):
-        self.connection_popup.dismiss()
-
+    def connectThread(self):
         #todo: host and port input validation
 
         if self.mode == 'client':
-            self.socket = self.clientConnect(self.host_input.text, int(self.port_input.text))
+            sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
         else:
-            self.socket = self.serverConnect(int(self.port_input.text))
+            sock = self.serverConnect(int(self.port_input.text))
 
-        #todo: mutual authentication here?
+        self.connection_popup.dismiss()
 
+        if not sock:
+            return
+
+        self.socket = sock
         self.send_data_button.disabled = False  
-        self.open_connection_button.disabled = True 
+        self.open_connection_button.disabled = True
+
+        # receive messages
+        while 1:
+            #todo: how much to receive?
+            data = self.socket.recv(5)
+            if data:
+                print data
+
+
+        #todo: mutual authentication     
+
+    def connect(self, obj):
+        self.connect_button.text = "Connecting..."
+        self.connect_button.disabled = True
+
+        threading.Thread(target=self.connectThread).start()
 
     def closeConnection(self, obj):
         self.socket.close()
@@ -107,24 +127,31 @@ class InitScreen(FloatLayout):
         self.socket.sendall(self.data_to_send.text)
         self.data_to_send.text = ''
 
+    # returns socket or nothing on failure    
     def clientConnect(self, host, port):
         # create the client socket
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         # connect to given ip and port
         try:
             client_socket.connect((host, port))
         except socket.error, msg:
-            print "Could not connect."
-            #todo: we may not want to actually exit the whole thing here
-            sys.exit(1)
+            print msg
+            return
 
         return client_socket
 
+    # returns socket or nothing on failure  
     def serverConnect(self, port):
         # create the server socket
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
         # bind the socket to host and port
-        server_socket.bind((socket.gethostname(), port))
+        try:
+            server_socket.bind((socket.gethostname(), port))
+        except socket.error, msg:
+            print msg    
+            return
         # listen for a connection
         server_socket.listen(1)
 
