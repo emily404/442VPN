@@ -13,6 +13,7 @@ class MutualAuthTest(unittest.TestCase):
 		self.bob_dh = 3
 
 	def test(self):
+
 		bits = 100
 		# alice send ra
 		ra = self.alice.generate_nonce(bits)
@@ -28,7 +29,7 @@ class MutualAuthTest(unittest.TestCase):
 		# alice's nonce is in plaintext
 		self.assertTrue(self.alice.check_nonce(plaintext))
 		# get bob's dh
-		self.assertEquals(str(self.bob_dh), self.alice.get_partner_dh_value(plaintext))
+		self.assertEquals(str(self.bob_dh), str(self.alice.get_partner_dh_value(plaintext)))
 
 		# alice use rb to encrypt ea encryted by alice
 		ea = self.alice.encrypt_nonce(rb, self.alice_dh)
@@ -40,7 +41,7 @@ class MutualAuthTest(unittest.TestCase):
 		# bob's nonce is in plaintext
 		self.assertTrue(self.bob.check_nonce(plaintext))
 		# get alice's dh
-		self.assertEquals(str(self.alice_dh), self.bob.get_partner_dh_value(plaintext))
+		self.assertEquals(str(self.alice_dh), str(self.bob.get_partner_dh_value(plaintext)))
 		
 if __name__ == '__main__':
     unittest.main()

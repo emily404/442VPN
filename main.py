@@ -118,72 +118,88 @@ class InitScreen(FloatLayout):
     def receiveData(self):
         data = ''
         newchar = ''
-        while newchar != '\n':
+        while newchar != '\0':
             #todo: how much to receive?
             newchar = self.socket.recv(1)
-            if newchar != '\n':
+            if newchar != '\0':
                 data = data + newchar
 
         # self.console.text = self.console.text + '\n' + 'Text received:' + data
-        print 'data:'+data
+        print 'data received:'+data
         return data
 
     def mutualAuthentication(self):
-        bits = 8
+        bits = 16
         nonce = self.mutual_auth.generate_nonce(bits)
-        client_dh = 17
-        server_dh = 3
+        # print 'nonce generated:' + str(nonce)
+        
         if self.mode == 'client':
-            self.socket.sendall('im alice,' + str(nonce)+'\n')
+            self.socket.sendall('im alice,' + str(nonce)+'\0')
 
             server_response = self.receiveData()
             server_nonce = server_response.split(',')[0]
             server_encrypted = server_response.split(',')[1]
-            print 'server_nonce:' + server_nonce
+            # print 'server_nonce:' + server_nonce
+            # print 'server_encrypted:' + server_encrypted
+            
             plaintext = self.mutual_auth.decrypt_ciphertext(server_encrypted)
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
-                server_dh = self.mutual_auth.get_partner_dh_value(plaintext)
-                print 'server_dh:' + server_dh
+                server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
+                print 'server partial session key received:'+str(server_partial_session_key)
+                dh = DiffieHellman.defaultInstance()
+                client_partial_session_key = dh.partialSessionKeyGen()[0]
+                print 'client partial session key:'+str(client_partial_session_key)
+                self.total_session_key = dh.computeTotalSessionKey(server_partial_session_key)
+                print 'client total session key:' + str(self.total_session_key)
 
-                encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_dh)
-                self.socket.sendall(encrypted+'\n')
-                print 'client sending encrypted:' + encrypted
+                encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_partial_session_key)
+                self.socket.sendall(encrypted+'\0')
+                # print 'client sending encrypted:' + encrypted
+                print 'success in authenticating server'
+                return True
             else:
                 print 'cannot authenticate server, check falied'
+                return False
 
         else:
             client_response = self.receiveData()
             client_nonce = client_response.split(',')[1]
-            print 'client_nonce:'+client_nonce
+            # print 'client_nonce:'+str(client_nonce)
 
-            encrypted = self.mutual_auth.encrypt_nonce(client_nonce, server_dh)
-            self.socket.sendall(str(nonce)+','+encrypted+'\n')
-            print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted
+            dh = DiffieHellman.defaultInstance()
+            server_partial_session_key = dh.partialSessionKeyGen()[0]
+            print 'server partial session key:'+str(server_partial_session_key)
+
+            encrypted = self.mutual_auth.encrypt_nonce(client_nonce, server_partial_session_key)
+            print 'server encrypted:'+encrypted
+            self.socket.sendall(str(nonce)+','+encrypted+'\0')
+            # print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted
 
             client_second_response = self.receiveData()
+            # print 'client_second_response:' + str(client_second_response)
+            
             plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
-                client_dh = self.mutual_auth.get_partner_dh_value(plaintext)
-                print 'client_dh:' + client_dh
-
+                client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
+                print 'client partial session key received:'+str(client_partial_session_key)
+                self.total_session_key = dh.computeTotalSessionKey(client_partial_session_key)
+                print 'server total session key:' + str(self.total_session_key)
+                print 'success in authenticating client'
+                return True    
             else:
                 print 'cannot authenticate client, check falied'
+                return False
             
             
         
     def useSharedSecret(self, obj):
         # if(self.shared_secret_value.text != ''):
-            # self.mutual_auth = MutualAuth(self.shared_secret_value.text, 'alice')
-            # self.send_data_button.disabled = False
-
-        if self.mode == 'client':
-            self.mutual_auth = MutualAuth('secretsecretsecretsecret', 'alice')
-        else:
-            self.mutual_auth = MutualAuth('secretsecretsecretsecret', 'bob')
-
-        self.mutualAuthentication()
+            # self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
         
-        self.send_data_button.disabled = False
+        self.mutual_auth = MutualAuth('secretsecretsecretsecret', self.mode)
+         
+        if(self.mutualAuthentication()):    
+            self.send_data_button.disabled = False
 
     
     def connect(self, obj):
