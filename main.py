@@ -14,8 +14,10 @@ from functools import partial
 import socket
 import threading
 import sys
+import md5
 
 import cbc as CBC
+
 from mutual_auth import MutualAuth
 from diffie_hellman import DiffieHellman
 
@@ -93,15 +95,11 @@ class InitScreen(FloatLayout):
 
     def connectThread(self):
         #todo: host and port input validation
-
+        port = 5526
         if self.mode == 'client':
-<<<<<<< HEAD
-            sock = self.clientConnect(socket.gethostname(), 7677)
-=======
-            sock = self.clientConnect(socket.gethostname(), 8646)
->>>>>>> master
+            sock = self.clientConnect(socket.gethostname(), port)
         else:
-            sock = self.serverConnect(8646)
+            sock = self.serverConnect(port)
         
         # if self.mode == 'client':
         #     sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
@@ -127,11 +125,13 @@ class InitScreen(FloatLayout):
         #         self.console.text = self.console.text + '\n' + 'Text received:' + data
 
     def messageReceivingService(self):
-        recieved = self.receiveData()
-        #TODO: add stuff like HMAC, DH etc etc etc
-        print "cipherText received: " + received.encode("hex_codec")
-        plainText = CBC.decrypt(self.cipher, recieved)
-        print "plainText received: " + plainText
+        while True:
+            # print "BLAH"
+            received = self.receiveData()
+            #TODO: add stuff like HMAC, DH etc etc etc
+            print "cipherText received: " + received.encode("hex_codec")
+            plainText = CBC.decrypt(self.cipher, received)
+            print "plainText received: " + plainText
 
 
     def receiveData(self):
@@ -143,6 +143,7 @@ class InitScreen(FloatLayout):
         while last_five != five_terminators:
             #todo: how much to receive?
             newchar = self.socket.recv(1)
+            # print "\n receiving "+ newchar.encode("hex_codec")
             data = data + newchar
             if(len(data) > 5):
                 last_five = data[len(data)-5:]
@@ -157,8 +158,8 @@ class InitScreen(FloatLayout):
         bits = 16
         nonce = self.mutual_auth.generate_nonce(bits)
         five_terminators = '\0\0\0\0\0'
-
         # print 'nonce generated:' + str(nonce)
+        
         
         if self.mode == 'client':
             # send client challenge
@@ -176,12 +177,9 @@ class InitScreen(FloatLayout):
 
             # check that nonce is correct and you weren't the one to encrypt it
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
-<<<<<<< HEAD
                 #client
-=======
                 print 'nonce and name check out'
                 # extract partial key sent by server
->>>>>>> master
                 server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
                 print 'extracted server partial key:'+str(server_partial_session_key)
 
@@ -199,7 +197,7 @@ class InitScreen(FloatLayout):
                 self.socket.sendall(encrypted+five_terminators)
                 print 'client sending encrypted:'+encrypted
                 print 'success in authenticating server'
-                threading.Thread(target=self.messageReceivingService).start()
+                
 
                 return True
             else:
@@ -208,11 +206,8 @@ class InitScreen(FloatLayout):
 
         # server mode
         else:
-<<<<<<< HEAD
             #server
-=======
             # wait to receive nonce from client
->>>>>>> master
             client_response = self.receiveData()
             client_nonce = client_response.split(',')[1]
             print 'received client_nonce:'+str(client_nonce)
@@ -230,14 +225,11 @@ class InitScreen(FloatLayout):
 
             # receive client challenge response
             client_second_response = self.receiveData()
-<<<<<<< HEAD
             # print 'client_second_response:' + str(client_second_response)
             threading.Thread(target=self.messageReceivingService).start()
-=======
             print 'client_second_response:' + str(client_second_response)
             
             # decrypt client response
->>>>>>> master
             plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
             print 'client_second_response plaintext:'+plaintext
 
@@ -250,6 +242,7 @@ class InitScreen(FloatLayout):
                 # compute session key
                 self.total_session_key = dh.computeTotalSessionKey(client_partial_session_key)
                 print 'total session key computed:' + str(self.total_session_key)
+                
                 print 'success in authenticating client'
                 return True    
             else:
@@ -267,6 +260,10 @@ class InitScreen(FloatLayout):
         if(self.mutualAuthentication()):    
             self.send_data_button.disabled = False
             self.send_secret_button.disabled = True
+            iVector = "aaaabbbbwwwweeee"
+            key = md5.new(str(self.total_session_key)).digest()
+            self.cipher = CBC.generateCBC(key, iVector)
+            threading.Thread(target=self.messageReceivingService).start()
 
     
     def connect(self, obj):
@@ -287,11 +284,11 @@ class InitScreen(FloatLayout):
 
     def sendData(self, obj):
         #todo: encryption here?
-        cipherText = CBC.encrypt(self.cipher, self.data_to_send)
+        cipherText = CBC.encrypt(self.cipher, self.data_to_send.text)
         self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
 
         print "encrypted cipherText to send"+cipherText.encode("hex_codec")
-        self.socket.sendall(cipherText)
+        self.socket.sendall(cipherText+"\0\0\0\0\0")
         self.data_to_send.text = ''
 
     # returns socket or nothing on failure    
