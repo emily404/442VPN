@@ -226,7 +226,6 @@ class InitScreen(FloatLayout):
             # receive client challenge response
             client_second_response = self.receiveData()
             # print 'client_second_response:' + str(client_second_response)
-            threading.Thread(target=self.messageReceivingService).start()
             print 'client_second_response:' + str(client_second_response)
             
             # decrypt client response
