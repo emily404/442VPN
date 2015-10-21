@@ -15,6 +15,7 @@ import socket
 import threading
 import sys
 
+import cbc as CBC
 from mutual_auth import MutualAuth
 from diffie_hellman import DiffieHellman
 
@@ -89,7 +90,7 @@ class InitScreen(FloatLayout):
         #todo: host and port input validation
 
         if self.mode == 'client':
-            sock = self.clientConnect('dhcp-128-189-204-68.ubcsecure.wireless.ubc.ca', 7677)
+            sock = self.clientConnect(socket.gethostname(), 7677)
         else:
             sock = self.serverConnect(7677)
         
@@ -114,6 +115,14 @@ class InitScreen(FloatLayout):
         #     data = self.socket.recv(5)
         #     if data:
         #         self.console.text = self.console.text + '\n' + 'Text received:' + data
+
+    def messageReceivingService(self):
+        recieved = self.receiveData()
+        #TODO: add stuff like HMAC, DH etc etc etc
+        print "cipherText received: " + received.encode("hex_codec")
+        plainText = CBC.decrypt(self.cipher, recieved)
+        print "plainText received: " + plainText
+
 
     def receiveData(self):
         data = ''
@@ -150,6 +159,7 @@ class InitScreen(FloatLayout):
             
             plaintext = self.mutual_auth.decrypt_ciphertext(server_encrypted)
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
+                #client
                 server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
                 dh = DiffieHellman.defaultInstance()
                 client_partial_session_key = dh.partialSessionKeyGen()[0]
@@ -159,12 +169,15 @@ class InitScreen(FloatLayout):
                 encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_partial_session_key)
                 self.socket.sendall(encrypted+five_terminators)
                 print 'success in authenticating server'
+                threading.Thread(target=self.messageReceivingService).start()
+
                 return True
             else:
                 print 'cannot authenticate server, check falied'
                 return False
 
         else:
+            #server
             client_response = self.receiveData()
             client_nonce = client_response.split(',')[1]
             # print 'client_nonce:'+str(client_nonce)
@@ -178,7 +191,7 @@ class InitScreen(FloatLayout):
 
             client_second_response = self.receiveData()
             # print 'client_second_response:' + str(client_second_response)
-            
+            threading.Thread(target=self.messageReceivingService).start()
             plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
                 client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
@@ -218,9 +231,11 @@ class InitScreen(FloatLayout):
 
     def sendData(self, obj):
         #todo: encryption here?
-
+        cipherText = CBC.encrypt(self.cipher, self.data_to_send)
         self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
-        self.socket.sendall(self.data_to_send.text)
+
+        print "encrypted cipherText to send"+cipherText.encode("hex_codec")
+        self.socket.sendall(cipherText)
         self.data_to_send.text = ''
 
     # returns socket or nothing on failure    
