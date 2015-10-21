@@ -89,9 +89,9 @@ class InitScreen(FloatLayout):
         #todo: host and port input validation
 
         if self.mode == 'client':
-            sock = self.clientConnect('dhcp-128-189-204-68.ubcsecure.wireless.ubc.ca', 1111)
+            sock = self.clientConnect('dhcp-128-189-204-68.ubcsecure.wireless.ubc.ca', 7677)
         else:
-            sock = self.serverConnect(1111)
+            sock = self.serverConnect(7677)
         
         # if self.mode == 'client':
         #     sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
@@ -118,43 +118,46 @@ class InitScreen(FloatLayout):
     def receiveData(self):
         data = ''
         newchar = ''
-        while newchar != '\0':
+        five_terminators = '\0\0\0\0\0'
+        last_five = 'abcde' 
+
+        while last_five != five_terminators:
             #todo: how much to receive?
             newchar = self.socket.recv(1)
-            if newchar != '\0':
-                data = data + newchar
+            data = data + newchar
+            if(len(data) > 5):
+                last_five = data[len(data)-5:]
+            else:
+                last_five = 'abcde' 
 
         # self.console.text = self.console.text + '\n' + 'Text received:' + data
-        print 'data received:'+data
-        return data
+        print 'data received:'+data[:len(data)-5]
+        return data[:len(data)-5]
 
     def mutualAuthentication(self):
         bits = 16
         nonce = self.mutual_auth.generate_nonce(bits)
+        five_terminators = '\0\0\0\0\0'
+
         # print 'nonce generated:' + str(nonce)
         
         if self.mode == 'client':
-            self.socket.sendall('im alice,' + str(nonce)+'\0')
+            self.socket.sendall('im alice,' + str(nonce)+five_terminators)
 
             server_response = self.receiveData()
             server_nonce = server_response.split(',')[0]
             server_encrypted = server_response.split(',')[1]
-            # print 'server_nonce:' + server_nonce
-            # print 'server_encrypted:' + server_encrypted
             
             plaintext = self.mutual_auth.decrypt_ciphertext(server_encrypted)
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
                 server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
-                print 'server partial session key received:'+str(server_partial_session_key)
                 dh = DiffieHellman.defaultInstance()
                 client_partial_session_key = dh.partialSessionKeyGen()[0]
-                print 'client partial session key:'+str(client_partial_session_key)
                 self.total_session_key = dh.computeTotalSessionKey(server_partial_session_key)
                 print 'client total session key:' + str(self.total_session_key)
 
                 encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_partial_session_key)
-                self.socket.sendall(encrypted+'\0')
-                # print 'client sending encrypted:' + encrypted
+                self.socket.sendall(encrypted+five_terminators)
                 print 'success in authenticating server'
                 return True
             else:
@@ -168,11 +171,9 @@ class InitScreen(FloatLayout):
 
             dh = DiffieHellman.defaultInstance()
             server_partial_session_key = dh.partialSessionKeyGen()[0]
-            print 'server partial session key:'+str(server_partial_session_key)
 
             encrypted = self.mutual_auth.encrypt_nonce(client_nonce, server_partial_session_key)
-            print 'server encrypted:'+encrypted
-            self.socket.sendall(str(nonce)+','+encrypted+'\0')
+            self.socket.sendall(str(nonce)+','+encrypted+five_terminators)
             # print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted
 
             client_second_response = self.receiveData()
@@ -181,7 +182,6 @@ class InitScreen(FloatLayout):
             plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
                 client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
-                print 'client partial session key received:'+str(client_partial_session_key)
                 self.total_session_key = dh.computeTotalSessionKey(client_partial_session_key)
                 print 'server total session key:' + str(self.total_session_key)
                 print 'success in authenticating client'

@@ -27,6 +27,5 @@ class MutualAuth:
         return str(self.nonce) in plaintext
 
     def get_partner_dh_value(self, plaintext):
-        print plaintext
         dh_value = plaintext.split(',')[2]
         return int(dh_value)
