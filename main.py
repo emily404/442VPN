@@ -26,7 +26,7 @@ class InitScreen(FloatLayout):
         self.add_widget(Label(text='Shared Secret Value', size_hint=(None, None), pos_hint={'top':0.95, 'right':0.3}))
         self.shared_secret_value = TextInput(password=False, multiline=False, size_hint=(0.46, 0.10), pos_hint={'top':0.88, 'right':0.5})
         self.add_widget(self.shared_secret_value)
-        send_secret_button = Button(text='Use Secret', size_hint=(.46, .05), pos_hint={'top':0.75, 'right':0.5})
+        send_secret_button = Button(text='Use Secret', size_hint=(.46, .05), pos_hint={'top':0.75, 'right':0.5}, disabled='true')
         self.add_widget(send_secret_button)
 
 
@@ -38,7 +38,7 @@ class InitScreen(FloatLayout):
 
         self.add_widget(Label(text='TCP Connection', size_hint=(.5, .05), pos_hint={'top':0.50, 'right':0.5}))
         open_connection_button  = Button(text='Open Connection', size_hint=(.22, .05), pos_hint={'top':0.40, 'right':0.25})
-        close_connection_button = Button(text='Close Connection', size_hint=(.22, .05), pos_hint={'top':0.40, 'right':0.5})
+        close_connection_button = Button(text='Close Connection', size_hint=(.22, .05), pos_hint={'top':0.40, 'right':0.5}, disabled='true')
         self.add_widget(open_connection_button)
         self.add_widget(close_connection_button)
         
@@ -55,6 +55,8 @@ class InitScreen(FloatLayout):
         self.server_button = server_button
         self.send_data_button = send_data_button
         self.open_connection_button = open_connection_button
+        self.close_connection_button = close_connection_button
+        self.send_secret_button = send_secret_button
 
         # bind event handlers
         open_connection_button.bind(on_press=partial(self.connectionPrompt))
@@ -86,19 +88,27 @@ class InitScreen(FloatLayout):
 
         connect_button.bind(on_press=self.connect)
 
+    def preventDismiss(self, obj):
+        return True
+
     def connectThread(self):
         #todo: host and port input validation
 
         if self.mode == 'client':
+<<<<<<< HEAD
             sock = self.clientConnect(socket.gethostname(), 7677)
+=======
+            sock = self.clientConnect(socket.gethostname(), 8646)
+>>>>>>> master
         else:
-            sock = self.serverConnect(7677)
+            sock = self.serverConnect(8646)
         
         # if self.mode == 'client':
         #     sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
         # else:
         #     sock = self.serverConnect(int(self.port_input.text))
 
+        self.connection_popup.unbind(on_dismiss=self.preventDismiss)
         self.connection_popup.dismiss()
 
         if not sock:
@@ -106,8 +116,8 @@ class InitScreen(FloatLayout):
 
         self.socket = sock  
         self.open_connection_button.disabled = True
-
-        # todo: mutual authentication
+        self.close_connection_button.disabled = False
+        self.send_secret_button.disabled = False
         
         # receive messages
         # while 1:
@@ -151,23 +161,43 @@ class InitScreen(FloatLayout):
         # print 'nonce generated:' + str(nonce)
         
         if self.mode == 'client':
+            # send client challenge
             self.socket.sendall('im alice,' + str(nonce)+five_terminators)
+            print 'client sent challenge:' + 'im alice,' + str(nonce)+five_terminators
 
+            # receive challenge response from client
             server_response = self.receiveData()
-            server_nonce = server_response.split(',')[0]
-            server_encrypted = server_response.split(',')[1]
+            server_nonce = server_response.split(',',1)[0]
+            server_encrypted = server_response.split(',',1)[1]
+            print 'received challenge response:'+server_response
             
             plaintext = self.mutual_auth.decrypt_ciphertext(server_encrypted)
+            print 'challenge response plaintext:'+plaintext
+
+            # check that nonce is correct and you weren't the one to encrypt it
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
+<<<<<<< HEAD
                 #client
+=======
+                print 'nonce and name check out'
+                # extract partial key sent by server
+>>>>>>> master
                 server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
+                print 'extracted server partial key:'+str(server_partial_session_key)
+
+                # generate client partial key
                 dh = DiffieHellman.defaultInstance()
                 client_partial_session_key = dh.partialSessionKeyGen()[0]
-                self.total_session_key = dh.computeTotalSessionKey(server_partial_session_key)
-                print 'client total session key:' + str(self.total_session_key)
+                print 'generated client partial key:'+str(client_partial_session_key)
 
+                # compute the session key
+                self.total_session_key = dh.computeTotalSessionKey(server_partial_session_key)
+                print 'total session key computed:' + str(self.total_session_key)
+
+                # encrypt server nonce and client partial key with shared secret and send
                 encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_partial_session_key)
                 self.socket.sendall(encrypted+five_terminators)
+                print 'client sending encrypted:'+encrypted
                 print 'success in authenticating server'
                 threading.Thread(target=self.messageReceivingService).start()
 
@@ -176,27 +206,50 @@ class InitScreen(FloatLayout):
                 print 'cannot authenticate server, check falied'
                 return False
 
+        # server mode
         else:
+<<<<<<< HEAD
             #server
+=======
+            # wait to receive nonce from client
+>>>>>>> master
             client_response = self.receiveData()
             client_nonce = client_response.split(',')[1]
-            # print 'client_nonce:'+str(client_nonce)
+            print 'received client_nonce:'+str(client_nonce)
 
+            # generate server partial key
             dh = DiffieHellman.defaultInstance()
             server_partial_session_key = dh.partialSessionKeyGen()[0]
+            print 'generated server partial key:'+str(server_partial_session_key)
 
+            # encrypt client nonce and server partial key with shared secret
             encrypted = self.mutual_auth.encrypt_nonce(client_nonce, server_partial_session_key)
+            # send server nonce along with encrypter message
             self.socket.sendall(str(nonce)+','+encrypted+five_terminators)
-            # print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted
+            print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted+five_terminators
 
+            # receive client challenge response
             client_second_response = self.receiveData()
+<<<<<<< HEAD
             # print 'client_second_response:' + str(client_second_response)
             threading.Thread(target=self.messageReceivingService).start()
+=======
+            print 'client_second_response:' + str(client_second_response)
+            
+            # decrypt client response
+>>>>>>> master
             plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
+            print 'client_second_response plaintext:'+plaintext
+
+            # check that nonce is correct and you weren't the one to encrypt it
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
+                print 'name and nonce check out'
+                # extract client partial key
                 client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
+                print 'extracted the client partial key:'+str(client_partial_session_key)
+                # compute session key
                 self.total_session_key = dh.computeTotalSessionKey(client_partial_session_key)
-                print 'server total session key:' + str(self.total_session_key)
+                print 'total session key computed:' + str(self.total_session_key)
                 print 'success in authenticating client'
                 return True    
             else:
@@ -209,15 +262,17 @@ class InitScreen(FloatLayout):
         # if(self.shared_secret_value.text != ''):
             # self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
         
-        self.mutual_auth = MutualAuth('secretsecretsecretsecret', self.mode)
+        self.mutual_auth = MutualAuth('secretsecretsecret', self.mode)
          
         if(self.mutualAuthentication()):    
             self.send_data_button.disabled = False
+            self.send_secret_button.disabled = True
 
     
     def connect(self, obj):
         self.connect_button.text = "Connecting..."
         self.connect_button.disabled = True
+        self.connection_popup.bind(on_dismiss=self.preventDismiss)
 
         threading.Thread(target=self.connectThread).start()
 
@@ -228,6 +283,7 @@ class InitScreen(FloatLayout):
         self.data_to_send.text = ''
 
         self.open_connection_button.disabled = False
+        self.close_connection_button.disabled = False
 
     def sendData(self, obj):
         #todo: encryption here?
