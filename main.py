@@ -235,7 +235,7 @@ class InitScreen(FloatLayout):
         # if(self.shared_secret_value.text != ''):
             # self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
         
-        self.mutual_auth = MutualAuth('secretsecretsecretsecret', self.mode)
+        self.mutual_auth = MutualAuth('secretsecretsecret', self.mode)
          
         if(self.mutualAuthentication()):    
             self.send_data_button.disabled = False

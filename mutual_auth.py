@@ -1,11 +1,12 @@
 import random
 from Crypto.Cipher import AES
+import md5
 import time
 
 class MutualAuth:
 
     def __init__(self, shared_secret, name):
-        self.shared_secret = shared_secret
+        self.shared_secret = md5.new(shared_secret).digest()
         self.IV = 'IVIVIVIVIVIVIVIV'
         self.aes = AES.new(self.shared_secret, AES.MODE_CFB, self.IV)
         self.name = name
