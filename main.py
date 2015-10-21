@@ -94,7 +94,7 @@ class InitScreen(FloatLayout):
         #todo: host and port input validation
 
         if self.mode == 'client':
-            sock = self.clientConnect('localhost', 8646)
+            sock = self.clientConnect(socket.gethostname(), 8646)
         else:
             sock = self.serverConnect(8646)
         
@@ -154,7 +154,6 @@ class InitScreen(FloatLayout):
 
             # receive challenge response from client
             server_response = self.receiveData()
-            print "split thing into this many:"+str(len(server_response.split(',')))
             server_nonce = server_response.split(',',1)[0]
             server_encrypted = server_response.split(',',1)[1]
             print 'received challenge response:'+server_response
