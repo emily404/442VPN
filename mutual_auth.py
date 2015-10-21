@@ -15,17 +15,17 @@ class MutualAuth:
         return nonce
 
     def encrypt_nonce(self, nonce_received, dh_value):
-        return self.aes.encrypt(str(self.name)+str(nonce_received)+str(dh_value))
+        return self.aes.encrypt(str(self.name)+','+str(nonce_received)+','+str(dh_value))
 
     def decrypt_ciphertext(self, ciphertext):
         return self.aes.decrypt(ciphertext)
 
-    def check_name(self, plaintext):    
+    def check_name(self, plaintext):   
         return self.name in plaintext
 
     def check_nonce(self, plaintext):  
         return str(self.nonce) in plaintext
 
     def get_partner_dh_value(self, plaintext):
-        dh_value = plaintext.split(self.nonce)[1]
-        return dh_value
+        dh_value = plaintext.split(',')[2]
+        return int(dh_value)

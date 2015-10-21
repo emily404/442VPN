@@ -11,11 +11,11 @@ class DiffieHellmanTest(unittest.TestCase):
 		self.bob = DiffieHellman(modulo, base)
 
 	def test(self):
-		aPair = self.alice.sessionKeyGen()
-		bPair = self.bob.sessionKeyGen()
+		aPair = self.alice.partialSessionKeyGen()
+		bPair = self.bob.partialSessionKeyGen()
 
-		a = self.alice.sessionKeyDecrypt(bPair[0])
-		b = self.bob.sessionKeyDecrypt(aPair[0])
+		a = self.alice.computeTotalSessionKey(bPair[0])
+		b = self.bob.computeTotalSessionKey(aPair[0])
 
 		self.assertEqual(a,b)
 

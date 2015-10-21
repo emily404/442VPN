@@ -12,18 +12,24 @@ from kivy.uix.popup import Popup
 
 from functools import partial
 import socket
-import sys
 import threading
+import sys
+
+from mutual_auth import MutualAuth
+from diffie_hellman import DiffieHellman
 
 class InitScreen(FloatLayout):
 
     def __init__(self, **kwargs):
         super(InitScreen, self).__init__(**kwargs)
         self.add_widget(Label(text='Shared Secret Value', size_hint=(None, None), pos_hint={'top':0.95, 'right':0.3}))
-        self.shared_secret_value = TextInput(password=True, multiline=False, size_hint=(0.46, 0.15), pos_hint={'top':0.85, 'right':0.5})
+        self.shared_secret_value = TextInput(password=False, multiline=False, size_hint=(0.46, 0.10), pos_hint={'top':0.88, 'right':0.5})
         self.add_widget(self.shared_secret_value)
+        send_secret_button = Button(text='Use Secret', size_hint=(.46, .05), pos_hint={'top':0.75, 'right':0.5})
+        self.add_widget(send_secret_button)
 
-        self.add_widget(Label(text='Mode', size_hint=(0.5, 0.05), pos_hint={'top':0.70, 'right':0.5}))
+
+        self.add_widget(Label(text='Mode', size_hint=(0.5, 0.05), pos_hint={'top':0.65, 'right':0.5}))
         client_button = ToggleButton(text='Client', group='Mode', size_hint=(.22, .05), pos_hint={'top':0.60, 'right':0.25})
         server_button = ToggleButton(text='Server', group='Mode', state='down', size_hint=(.22, .05), pos_hint={'top':0.60, 'right':0.5})
         self.add_widget(client_button)
@@ -42,10 +48,9 @@ class InitScreen(FloatLayout):
         self.add_widget(send_data_button)
 
         self.add_widget(Label(text='Console', size_hint=(.4, .05), pos_hint={'top':0.95, 'right':0.95}))
-        self.console = TextInput(password=False, multiline=True, size_hint=(.40, .8), pos_hint={'top':0.90, 'right':0.95})
+        self.console = TextInput(password=False, multiline=True, size_hint=(.40, .9), pos_hint={'top':0.90, 'right':0.95})
         self.add_widget(self.console)
-        self.add_widget(Button(text='Continue', size_hint=(.40, .05), pos_hint={'top':0.07, 'right':0.95}))
-
+        
         self.server_button = server_button
         self.send_data_button = send_data_button
         self.open_connection_button = open_connection_button
@@ -53,10 +58,10 @@ class InitScreen(FloatLayout):
         # bind event handlers
         open_connection_button.bind(on_press=partial(self.connectionPrompt))
         close_connection_button.bind(on_press=self.closeConnection)
+        send_secret_button.bind(on_press=self.useSharedSecret)
         send_data_button.bind(on_press=self.sendData)
 
 
-    
     def connectionPrompt(self, obj):
         prompt    = BoxLayout(size=(250,250),orientation="vertical",spacing=20,padding=20)
         self.mode = 'server' if self.server_button.state == 'down' else 'client'
@@ -84,29 +89,119 @@ class InitScreen(FloatLayout):
         #todo: host and port input validation
 
         if self.mode == 'client':
-            sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
+            sock = self.clientConnect('dhcp-128-189-204-68.ubcsecure.wireless.ubc.ca', 7677)
         else:
-            sock = self.serverConnect(int(self.port_input.text))
+            sock = self.serverConnect(7677)
+        
+        # if self.mode == 'client':
+        #     sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
+        # else:
+        #     sock = self.serverConnect(int(self.port_input.text))
 
         self.connection_popup.dismiss()
 
         if not sock:
             return
 
-        self.socket = sock
-        self.send_data_button.disabled = False  
+        self.socket = sock  
         self.open_connection_button.disabled = True
 
+        # todo: mutual authentication
+        
         # receive messages
-        while 1:
+        # while 1:
+        #     #todo: how much to receive?
+        #     data = self.socket.recv(5)
+        #     if data:
+        #         self.console.text = self.console.text + '\n' + 'Text received:' + data
+
+    def receiveData(self):
+        data = ''
+        newchar = ''
+        five_terminators = '\0\0\0\0\0'
+        last_five = 'abcde' 
+
+        while last_five != five_terminators:
             #todo: how much to receive?
-            data = self.socket.recv(5)
-            if data:
-                print data
+            newchar = self.socket.recv(1)
+            data = data + newchar
+            if(len(data) > 5):
+                last_five = data[len(data)-5:]
+            else:
+                last_five = 'abcde' 
 
+        # self.console.text = self.console.text + '\n' + 'Text received:' + data
+        print 'data received:'+data[:len(data)-5]
+        return data[:len(data)-5]
 
-        #todo: mutual authentication     
+    def mutualAuthentication(self):
+        bits = 16
+        nonce = self.mutual_auth.generate_nonce(bits)
+        five_terminators = '\0\0\0\0\0'
 
+        # print 'nonce generated:' + str(nonce)
+        
+        if self.mode == 'client':
+            self.socket.sendall('im alice,' + str(nonce)+five_terminators)
+
+            server_response = self.receiveData()
+            server_nonce = server_response.split(',')[0]
+            server_encrypted = server_response.split(',')[1]
+            
+            plaintext = self.mutual_auth.decrypt_ciphertext(server_encrypted)
+            if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
+                server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
+                dh = DiffieHellman.defaultInstance()
+                client_partial_session_key = dh.partialSessionKeyGen()[0]
+                self.total_session_key = dh.computeTotalSessionKey(server_partial_session_key)
+                print 'client total session key:' + str(self.total_session_key)
+
+                encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_partial_session_key)
+                self.socket.sendall(encrypted+five_terminators)
+                print 'success in authenticating server'
+                return True
+            else:
+                print 'cannot authenticate server, check falied'
+                return False
+
+        else:
+            client_response = self.receiveData()
+            client_nonce = client_response.split(',')[1]
+            # print 'client_nonce:'+str(client_nonce)
+
+            dh = DiffieHellman.defaultInstance()
+            server_partial_session_key = dh.partialSessionKeyGen()[0]
+
+            encrypted = self.mutual_auth.encrypt_nonce(client_nonce, server_partial_session_key)
+            self.socket.sendall(str(nonce)+','+encrypted+five_terminators)
+            # print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted
+
+            client_second_response = self.receiveData()
+            # print 'client_second_response:' + str(client_second_response)
+            
+            plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
+            if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
+                client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
+                self.total_session_key = dh.computeTotalSessionKey(client_partial_session_key)
+                print 'server total session key:' + str(self.total_session_key)
+                print 'success in authenticating client'
+                return True    
+            else:
+                print 'cannot authenticate client, check falied'
+                return False
+            
+            
+        
+    def useSharedSecret(self, obj):
+        # if(self.shared_secret_value.text != ''):
+            # self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
+        
+        self.mutual_auth = MutualAuth('secretsecretsecretsecret', self.mode)
+         
+        if(self.mutualAuthentication()):    
+            self.send_data_button.disabled = False
+
+    
     def connect(self, obj):
         self.connect_button.text = "Connecting..."
         self.connect_button.disabled = True
@@ -124,6 +219,7 @@ class InitScreen(FloatLayout):
     def sendData(self, obj):
         #todo: encryption here?
 
+        self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
         self.socket.sendall(self.data_to_send.text)
         self.data_to_send.text = ''
 
@@ -145,7 +241,7 @@ class InitScreen(FloatLayout):
     def serverConnect(self, port):
         # create the server socket
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+        print socket.gethostname()
         # bind the socket to host and port
         try:
             server_socket.bind((socket.gethostname(), port))
@@ -157,7 +253,7 @@ class InitScreen(FloatLayout):
 
         sock, addr = server_socket.accept()
         return sock   
-  
+
 
 class MyApp(App):
 
