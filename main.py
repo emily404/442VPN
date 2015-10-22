@@ -243,12 +243,15 @@ class InitScreen(FloatLayout):
             
         
     def useSharedSecret(self, obj):
-        self.shared_secret_value.disabled = True
 
-        # if(self.shared_secret_value.text != ''):
-            # self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
+        if(self.shared_secret_value.text != ''):
+            self.shared_secret_value.disabled = True
+            self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
+        else:
+            print "Please enter a shared secret."
+            return
         
-        self.mutual_auth = MutualAuth('secretsecretsecret', self.mode)
+        # self.mutual_auth = MutualAuth('secretsecretsecret', self.mode)
          
         if(self.mutualAuthentication()):    
             self.key_estabilshment_inprogress = False
