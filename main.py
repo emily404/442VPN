@@ -72,9 +72,6 @@ class InitScreen(FloatLayout):
         send_secret_button.bind(on_press=self.useSharedSecret)
         send_data_button.bind(on_press=self.sendData)
 
-        #TODO: BE REMOVED
-        self.sharedSecret = "234567890"
-
 
     def connectionPrompt(self, obj):
         prompt    = BoxLayout(size=(250,250),orientation="vertical",spacing=20,padding=20)
@@ -104,7 +101,7 @@ class InitScreen(FloatLayout):
 
     def connectThread(self):
         #todo: host and port input validation
-        port = 5542
+        port = 5546
         if self.mode == 'client':
             sock = self.clientConnect(socket.gethostname(), port)
         else:
@@ -246,7 +243,8 @@ class InitScreen(FloatLayout):
 
         if(self.shared_secret_value.text != ''):
             self.shared_secret_value.disabled = True
-            self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
+            self.shared_secret_hash = md5.new(self.shared_secret_value.text).digest()
+            self.mutual_auth = MutualAuth(self.shared_secret_hash, self.mode)
         else:
             print "Please enter a shared secret."
             return
@@ -287,7 +285,7 @@ class InitScreen(FloatLayout):
         plainText = self.data_to_send.text
         cipherText = CBC.encrypt(self.cipher, plainText)
         self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
-        hmacVal = hmac_gen.genHmac(self.sharedSecret, plainText)
+        hmacVal = hmac_gen.genHmac(self.shared_secret_hash, plainText)
 
         print "encrypted cipherText to send "+cipherText
         print "hmac value " + hmacVal + "of type "+ str(type(hmacVal))
@@ -320,7 +318,7 @@ class InitScreen(FloatLayout):
                 print "cipherText received: " + cipherText
                 plainText = CBC.decrypt(self.cipher, cipherText)
                 print "plainText received: " + plainText
-                generatedHmac = hmac_gen.genHmac(self.sharedSecret, plainText)
+                generatedHmac = hmac_gen.genHmac(self.shared_secret_hash, plainText)
                 print "hmac generated: " + generatedHmac
 
                 if(receivedHmac != generatedHmac):
