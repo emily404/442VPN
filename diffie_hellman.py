@@ -41,8 +41,10 @@ class DiffieHellman:
 
 	def computeTotalSessionKey(self, sKey):
 		s = pow(sKey, self.secret, self.modulo)
-		# print "[DiffieHellman] generating common key: "+str(s)
+		print "[DiffieHellman] generating common key: "+str(s)
+		self.secret = 0
 		return s
+
 
 
 

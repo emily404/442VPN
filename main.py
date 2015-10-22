@@ -15,12 +15,17 @@ import socket
 import threading
 import sys
 import md5
+import time
 
 import cbc as CBC
 
 import hmac_gen 
 from mutual_auth import MutualAuth
 from diffie_hellman import DiffieHellman
+
+MSG_TYPE_DH              = 'D'
+MSG_TYPE_REGULAR         = 'R'
+SESSION_REFRESH_TIMER_S  = 10
 
 class InitScreen(FloatLayout):
 
@@ -99,7 +104,7 @@ class InitScreen(FloatLayout):
 
     def connectThread(self):
         #todo: host and port input validation
-        port = 5532
+        port = 5541
         if self.mode == 'client':
             sock = self.clientConnect(socket.gethostname(), port)
         else:
@@ -120,13 +125,6 @@ class InitScreen(FloatLayout):
         self.open_connection_button.disabled = True
         self.close_connection_button.disabled = False
         self.send_secret_button.disabled = False
-        
-        # receive messages
-        # while 1:
-        #     #todo: how much to receive?
-        #     data = self.socket.recv(5)
-        #     if data:
-        #         self.console.text = self.console.text + '\n' + 'Text received:' + data
 
    
     def receiveData(self):
@@ -155,7 +153,8 @@ class InitScreen(FloatLayout):
         five_terminators = '\0\0\0\0\0'
         # print 'nonce generated:' + str(nonce)
         
-        
+        self.dh = DiffieHellman.defaultInstance()
+
         if self.mode == 'client':
             # send client challenge
             self.socket.sendall('im alice,' + str(nonce)+five_terminators)
@@ -179,12 +178,11 @@ class InitScreen(FloatLayout):
                 print 'extracted server partial key:'+str(server_partial_session_key)
 
                 # generate client partial key
-                dh = DiffieHellman.defaultInstance()
-                client_partial_session_key = dh.partialSessionKeyGen()[0]
+                client_partial_session_key = self.dh.partialSessionKeyGen()[0]
                 print 'generated client partial key:'+str(client_partial_session_key)
 
                 # compute the session key
-                self.total_session_key = dh.computeTotalSessionKey(server_partial_session_key)
+                self.total_session_key = self.dh.computeTotalSessionKey(server_partial_session_key)
                 print 'total session key computed:' + str(self.total_session_key)
 
                 # encrypt server nonce and client partial key with shared secret and send
@@ -208,8 +206,7 @@ class InitScreen(FloatLayout):
             print 'received client_nonce:'+str(client_nonce)
 
             # generate server partial key
-            dh = DiffieHellman.defaultInstance()
-            server_partial_session_key = dh.partialSessionKeyGen()[0]
+            server_partial_session_key = self.dh.partialSessionKeyGen()[0]
             print 'generated server partial key:'+str(server_partial_session_key)
 
             # encrypt client nonce and server partial key with shared secret
@@ -234,7 +231,7 @@ class InitScreen(FloatLayout):
                 client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
                 print 'extracted the client partial key:'+str(client_partial_session_key)
                 # compute session key
-                self.total_session_key = dh.computeTotalSessionKey(client_partial_session_key)
+                self.total_session_key = self.dh.computeTotalSessionKey(client_partial_session_key)
                 print 'total session key computed:' + str(self.total_session_key)
                 
                 print 'success in authenticating client'
@@ -252,12 +249,16 @@ class InitScreen(FloatLayout):
         self.mutual_auth = MutualAuth('secretsecretsecret', self.mode)
          
         if(self.mutualAuthentication()):    
+            self.key_estabilshment_inprogress = False
             self.send_data_button.disabled = False
             self.send_secret_button.disabled = True
             iVector = "aaaabbbbwwwweeee"
             key = md5.new(str(self.total_session_key)).digest()
             self.cipher = CBC.generateCBC(key, iVector)
             threading.Thread(target=self.messageReceivingService).start()
+
+            if(self.mode == 'server'):
+                threading.Thread(target=self.updateSessionKeyService).start()
 
     
     def connect(self, obj):
@@ -285,23 +286,53 @@ class InitScreen(FloatLayout):
 
         print "encrypted cipherText to send "+cipherText
         print "hmac value " + hmacVal + "of type "+ str(type(hmacVal))
-        self.socket.sendall(hmacVal + cipherText+"\0\0\0\0\0")
+        self.socket.sendall('R' + hmacVal + cipherText+"\0\0\0\0\0")
         self.data_to_send.text = ''
 
 
     def messageReceivingService(self):
         while True:
-            # print "BLAH"
             received = self.receiveData()
-            #TODO: add stuff like HMAC, DH etc etc etc
-            receivedHmac = received[:32]
-            cipherText = received[32:]
-            print "hmac received "+ receivedHmac
-            print "cipherText received: " + cipherText
-            plainText = CBC.decrypt(self.cipher, cipherText)
-            print "plainText received: " + plainText
-            generatedHmac = hmac_gen.genHmac(self.sharedSecret, plainText)
-            print "hmac generated: " + generatedHmac
+            print "received: " + received
+
+            if(received[0] == MSG_TYPE_DH):
+                print "received a dh msg"
+                partial_session_key_received = int(received[1:])
+                if(self.mode == 'client'):
+                    partial_session_key_generated = self.dh.partialSessionKeyGen()[0]
+                    self.socket.sendall(MSG_TYPE_DH + str(partial_session_key_generated) + '\0\0\0\0\0')
+
+                self.total_session_key = self.dh.computeTotalSessionKey(partial_session_key_received)
+                self.key_estabilshment_inprogress = False
+            else:
+                #TODO: add stuff like HMAC, DH etc etc etc
+                received = received[1:]
+
+                # HMAC is first 16 bytes (32 hex digits)
+                receivedHmac = received[:32]
+                cipherText = received[32:]
+                print "hmac received "+ receivedHmac
+                print "cipherText received: " + cipherText
+                plainText = CBC.decrypt(self.cipher, cipherText)
+                print "plainText received: " + plainText
+                generatedHmac = hmac_gen.genHmac(self.sharedSecret, plainText)
+                print "hmac generated: " + generatedHmac
+
+                if(receivedHmac != generatedHmac):
+                    print "ERROR: Message integrity compromised!"
+
+    def updateSessionKeyService(self):
+        while True:
+            time.sleep(SESSION_REFRESH_TIMER_S)
+            if(self.key_estabilshment_inprogress):
+                continue
+
+            print "generating new session key now"
+
+            partial_session_key = self.dh.partialSessionKeyGen()[0]
+            msg = MSG_TYPE_DH + str(partial_session_key) + "\0\0\0\0\0"
+            self.socket.sendall(msg)
+            self.key_estabilshment_inprogress = True
 
 
     # returns socket or nothing on failure    
