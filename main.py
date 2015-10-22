@@ -73,7 +73,7 @@ class InitScreen(FloatLayout):
         send_secret_button.bind(on_press=self.useSharedSecret)
         send_data_button.bind(on_press=self.sendData)
 
-
+    # build UI prompt for connecting
     def connectionPrompt(self, obj):
         prompt    = BoxLayout(size=(250,250),orientation="vertical",spacing=20,padding=20)
         self.mode = 'server' if self.server_button.state == 'down' else 'client'
@@ -100,31 +100,36 @@ class InitScreen(FloatLayout):
     def preventDismiss(self, obj):
         return True
 
+    # thread for establishing connection
     def connectThread(self):
-        #todo: host and port input validation
-        port = 5557
+        try:
+            port = int(self.port_input.text)
+        except ValueError as e:
+            print e
+            self.console.text = self.console.text + "\nERROR: Invalid port"
+            self.connection_popup.unbind(on_dismiss=self.preventDismiss)
+            self.connection_popup.dismiss()
+            return
+
         if self.mode == 'client':
-            sock = self.clientConnect(socket.gethostname(), port)
+            sock = self.clientConnect(self.host_input.text, port)
         else:
             sock = self.serverConnect(port)
-        
-        # if self.mode == 'client':
-        #     sock = self.clientConnect(self.host_input.text, int(self.port_input.text))
-        # else:
-        #     sock = self.serverConnect(int(self.port_input.text))
 
         self.connection_popup.unbind(on_dismiss=self.preventDismiss)
         self.connection_popup.dismiss()
 
+        # if connection was not successful do not continue
         if not sock:
             return
 
+        self.console.text = self.console.text + "\nConnected successfully!"
         self.socket = sock  
         self.open_connection_button.disabled = True
         self.close_connection_button.disabled = False
         self.send_secret_button.disabled = False
 
-   
+    # reads in data until it encounters TERMINATORS
     def receiveData(self):
         data = ''
         newchar = ''
@@ -140,6 +145,7 @@ class InitScreen(FloatLayout):
 
         return data[:len(data)-5]
 
+    # exchange nonce and establish session key
     def mutualAuthentication(self):
         bits = 16
         nonce = self.mutual_auth.generate_nonce(bits)
@@ -225,28 +231,35 @@ class InitScreen(FloatLayout):
                 print '[MutualAuthentication] cannot authenticate client, check falied'
                 return False
             
-            
-        
+    # triggers mutual authentication        
     def useSharedSecret(self, obj):
 
+        # validate shared secret input
         if(self.shared_secret_value.text != ''):
             self.shared_secret_value.disabled = True
+
+            # use hashed shared secret as key for mutual authentication
             self.shared_secret_hash = md5.new(self.shared_secret_value.text).digest()
             self.mutual_auth = MutualAuth(self.shared_secret_hash, self.mode)
         else:
             self.console.text = self.console.text + "\nERROR: Please enter a shared secret."
             print "ERROR: Please enter a shared secret."
             return
-         
+        
+        # on success 
         if(self.mutualAuthentication()):    
             self.key_estabilshment_inprogress = False
             self.send_data_button.disabled = False
             self.send_secret_button.disabled = True
 
+            # initialize the CBC cipher
             key = md5.new(str(self.total_session_key)).digest()
             self.cipher = CBC.generateCBC(key)
+
+            # start up thread for receiving incoming messages
             threading.Thread(target=self.messageReceivingService).start()
 
+            # in server, start up thread to periodically refresh session key
             if(self.mode == 'server'):
                 threading.Thread(target=self.updateSessionKeyService).start()
 
@@ -267,10 +280,11 @@ class InitScreen(FloatLayout):
         self.open_connection_button.disabled = False
         self.close_connection_button.disabled = False
 
+    # sends user inputted messages
     def sendData(self, obj):
         plaintext = self.data_to_send.text
         ciphertext = CBC.encrypt(self.cipher, plaintext)
-        self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
+        self.console.text = self.console.text + '\n' + 'Text to be sent: ' + self.data_to_send.text
         hmacVal = hmac_gen.genHmac(self.shared_secret_hash, plaintext)
 
         print "[Outgoing] encrypted ciphertext to send: " + ciphertext
@@ -284,6 +298,7 @@ class InitScreen(FloatLayout):
             received = self.receiveData()
             print "[Incoming] received raw message: " + received
 
+            # special message for exchanging Diffie Hellman keys
             if(received[0] == MSG_TYPE_DH):
                 partial_session_key_received = int(received[1:])
                 if(self.mode == 'client'):
@@ -292,6 +307,8 @@ class InitScreen(FloatLayout):
 
                 self.total_session_key = self.dh.computeTotalSessionKey(partial_session_key_received)
                 self.key_estabilshment_inprogress = False
+
+            # regular messages sent by user    
             else:
                 received = received[1:]
 
@@ -314,6 +331,8 @@ class InitScreen(FloatLayout):
     def updateSessionKeyService(self):
         while True:
             time.sleep(SESSION_REFRESH_TIMER_S)
+
+            # do not generate new partial key if previous exchange has not been completed
             if(self.key_estabilshment_inprogress):
                 continue
 

@@ -41,6 +41,8 @@ class DiffieHellman:
 	def computeTotalSessionKey(self, sKey):
 		s = pow(sKey, self.secret, self.modulo)
 		print "[DiffieHellman] generating total key: "+str(s)
+
+		# forget secret
 		self.secret = 0
 		return s
 
