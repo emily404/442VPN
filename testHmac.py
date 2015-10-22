@@ -2,7 +2,7 @@ import unittest
 from hmac_gen import hmacGenerator
 
 class hmacTest(unittest.TestCase):
-
+#this test.....is useless
 	def setUp(self):
 		key = "TESTKEY"
 		message = "THISTHETESTMESSAGE"
