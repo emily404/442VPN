@@ -104,7 +104,7 @@ class InitScreen(FloatLayout):
 
     def connectThread(self):
         #todo: host and port input validation
-        port = 5541
+        port = 5542
         if self.mode == 'client':
             sock = self.clientConnect(socket.gethostname(), port)
         else:
@@ -243,6 +243,8 @@ class InitScreen(FloatLayout):
             
         
     def useSharedSecret(self, obj):
+        self.shared_secret_value.disabled = True
+
         # if(self.shared_secret_value.text != ''):
             # self.mutual_auth = MutualAuth(self.shared_secret_value.text, self.mode)
         
