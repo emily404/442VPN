@@ -18,6 +18,7 @@ import md5
 
 import cbc as CBC
 
+import hmac_gen 
 from mutual_auth import MutualAuth
 from diffie_hellman import DiffieHellman
 
@@ -66,6 +67,9 @@ class InitScreen(FloatLayout):
         send_secret_button.bind(on_press=self.useSharedSecret)
         send_data_button.bind(on_press=self.sendData)
 
+        #TODO: BE REMOVED
+        self.sharedSecret = "234567890"
+
 
     def connectionPrompt(self, obj):
         prompt    = BoxLayout(size=(250,250),orientation="vertical",spacing=20,padding=20)
@@ -95,7 +99,7 @@ class InitScreen(FloatLayout):
 
     def connectThread(self):
         #todo: host and port input validation
-        port = 5526
+        port = 5532
         if self.mode == 'client':
             sock = self.clientConnect(socket.gethostname(), port)
         else:
@@ -124,16 +128,7 @@ class InitScreen(FloatLayout):
         #     if data:
         #         self.console.text = self.console.text + '\n' + 'Text received:' + data
 
-    def messageReceivingService(self):
-        while True:
-            # print "BLAH"
-            received = self.receiveData()
-            #TODO: add stuff like HMAC, DH etc etc etc
-            print "cipherText received: " + received.encode("hex_codec")
-            plainText = CBC.decrypt(self.cipher, received)
-            print "plainText received: " + plainText
-
-
+   
     def receiveData(self):
         data = ''
         newchar = ''
@@ -283,12 +278,31 @@ class InitScreen(FloatLayout):
 
     def sendData(self, obj):
         #todo: encryption here?
-        cipherText = CBC.encrypt(self.cipher, self.data_to_send.text)
+        plainText = self.data_to_send.text
+        cipherText = CBC.encrypt(self.cipher, plainText)
         self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
+        hmacVal = hmac_gen.genHmac(self.sharedSecret, plainText)
 
-        print "encrypted cipherText to send"+cipherText.encode("hex_codec")
-        self.socket.sendall(cipherText+"\0\0\0\0\0")
+        print "encrypted cipherText to send "+cipherText
+        print "hmac value " + hmacVal + "of type "+ str(type(hmacVal))
+        self.socket.sendall(hmacVal + cipherText+"\0\0\0\0\0")
         self.data_to_send.text = ''
+
+
+    def messageReceivingService(self):
+        while True:
+            # print "BLAH"
+            received = self.receiveData()
+            #TODO: add stuff like HMAC, DH etc etc etc
+            receivedHmac = received[:32]
+            cipherText = received[32:]
+            print "hmac received "+ receivedHmac
+            print "cipherText received: " + cipherText
+            plainText = CBC.decrypt(self.cipher, cipherText)
+            print "plainText received: " + plainText
+            generatedHmac = hmac_gen.genHmac(self.sharedSecret, plainText)
+            print "hmac generated: " + generatedHmac
+
 
     # returns socket or nothing on failure    
     def clientConnect(self, host, port):
