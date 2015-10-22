@@ -25,7 +25,8 @@ from diffie_hellman import DiffieHellman
 
 MSG_TYPE_DH              = 'D'
 MSG_TYPE_REGULAR         = 'R'
-SESSION_REFRESH_TIMER_S  = 10
+SESSION_REFRESH_TIMER_S  = 60
+TERMINATORS              = '\0\0\0\0\0'
 
 class InitScreen(FloatLayout):
 
@@ -101,7 +102,7 @@ class InitScreen(FloatLayout):
 
     def connectThread(self):
         #todo: host and port input validation
-        port = 5546
+        port = 5557
         if self.mode == 'client':
             sock = self.clientConnect(socket.gethostname(), port)
         else:
@@ -127,71 +128,61 @@ class InitScreen(FloatLayout):
     def receiveData(self):
         data = ''
         newchar = ''
-        five_terminators = '\0\0\0\0\0'
         last_five = 'abcde' 
 
-        while last_five != five_terminators:
-            #todo: how much to receive?
+        while last_five != TERMINATORS:
             newchar = self.socket.recv(1)
-            # print "\n receiving "+ newchar.encode("hex_codec")
             data = data + newchar
             if(len(data) > 5):
                 last_five = data[len(data)-5:]
             else:
                 last_five = 'abcde' 
 
-        # self.console.text = self.console.text + '\n' + 'Text received:' + data
-        print 'data received:'+data[:len(data)-5]
         return data[:len(data)-5]
 
     def mutualAuthentication(self):
         bits = 16
         nonce = self.mutual_auth.generate_nonce(bits)
-        five_terminators = '\0\0\0\0\0'
-        # print 'nonce generated:' + str(nonce)
         
         self.dh = DiffieHellman.defaultInstance()
 
         if self.mode == 'client':
             # send client challenge
-            self.socket.sendall('im alice,' + str(nonce)+five_terminators)
-            print 'client sent challenge:' + 'im alice,' + str(nonce)+five_terminators
+            self.socket.sendall('im alice,' + str(nonce) + TERMINATORS)
+            print '[MutualAuthentication] client sent: im alice,' + str(nonce)
 
             # receive challenge response from client
             server_response = self.receiveData()
             server_nonce = server_response.split(',',1)[0]
             server_encrypted = server_response.split(',',1)[1]
-            print 'received challenge response:'+server_response
+            print '[MutualAuthentication] client received nonce from server: ' + server_nonce
+            print '[MutualAuthentication] client received encrypted text: ' + server_encrypted
             
             plaintext = self.mutual_auth.decrypt_ciphertext(server_encrypted)
-            print 'challenge response plaintext:'+plaintext
+            print '[MutualAuthentication] client decrypted plaintext: ' + plaintext
 
             # check that nonce is correct and you weren't the one to encrypt it
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
-                #client
-                print 'nonce and name check out'
                 # extract partial key sent by server
                 server_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
-                print 'extracted server partial key:'+str(server_partial_session_key)
+                print '[MutualAuthentication] extracted server partial key: ' + str(server_partial_session_key)
 
                 # generate client partial key
                 client_partial_session_key = self.dh.partialSessionKeyGen()[0]
-                print 'generated client partial key:'+str(client_partial_session_key)
 
                 # compute the session key
                 self.total_session_key = self.dh.computeTotalSessionKey(server_partial_session_key)
-                print 'total session key computed:' + str(self.total_session_key)
 
                 # encrypt server nonce and client partial key with shared secret and send
                 encrypted = self.mutual_auth.encrypt_nonce(server_nonce, client_partial_session_key)
-                self.socket.sendall(encrypted+five_terminators)
-                print 'client sending encrypted:'+encrypted
-                print 'success in authenticating server'
+                self.socket.sendall(encrypted + TERMINATORS)
+                print '[MutualAuthentication] client sending encrypted text: ' + encrypted
+                print '[MutualAuthentication] success in authenticating server'
                 
 
                 return True
             else:
-                print 'cannot authenticate server, check falied'
+                print '[MutualAuthentication] cannot authenticate server, check falied'
                 return False
 
         # server mode
@@ -200,41 +191,38 @@ class InitScreen(FloatLayout):
             # wait to receive nonce from client
             client_response = self.receiveData()
             client_nonce = client_response.split(',')[1]
-            print 'received client_nonce:'+str(client_nonce)
+            print '[MutualAuthentication] received client_nonce:'+str(client_nonce)
 
             # generate server partial key
             server_partial_session_key = self.dh.partialSessionKeyGen()[0]
-            print 'generated server partial key:'+str(server_partial_session_key)
 
             # encrypt client nonce and server partial key with shared secret
             encrypted = self.mutual_auth.encrypt_nonce(client_nonce, server_partial_session_key)
             # send server nonce along with encrypter message
-            self.socket.sendall(str(nonce)+','+encrypted+five_terminators)
-            print 'server sending nonce and encrypted:' + str(nonce)+','+encrypted+five_terminators
+            self.socket.sendall(str(nonce) + ',' + encrypted + TERMINATORS)
+            print '[MutualAuthentication] server sending nonce: ' + str(nonce)
+            print '[MutualAuthentication] server sending encrypted text: ' + encrypted
 
             # receive client challenge response
             client_second_response = self.receiveData()
-            # print 'client_second_response:' + str(client_second_response)
-            print 'client_second_response:' + str(client_second_response)
+            print '[MutualAuthentication] server received client response: ' + str(client_second_response)
             
             # decrypt client response
             plaintext = self.mutual_auth.decrypt_ciphertext(client_second_response)
-            print 'client_second_response plaintext:'+plaintext
+            print '[MutualAuthentication] server decrypted plaintext: ' + plaintext
 
             # check that nonce is correct and you weren't the one to encrypt it
             if(not self.mutual_auth.check_name(plaintext) and self.mutual_auth.check_nonce(plaintext)):
-                print 'name and nonce check out'
                 # extract client partial key
                 client_partial_session_key = self.mutual_auth.get_partner_dh_value(plaintext)
-                print 'extracted the client partial key:'+str(client_partial_session_key)
+                print '[MutualAuthentication] extracted the client partial key: ' + str(client_partial_session_key)
                 # compute session key
                 self.total_session_key = self.dh.computeTotalSessionKey(client_partial_session_key)
-                print 'total session key computed:' + str(self.total_session_key)
                 
-                print 'success in authenticating client'
+                print '[MutualAuthentication] success in authenticating client'
                 return True    
             else:
-                print 'cannot authenticate client, check falied'
+                print '[MutualAuthentication] cannot authenticate client, check falied'
                 return False
             
             
@@ -246,18 +234,17 @@ class InitScreen(FloatLayout):
             self.shared_secret_hash = md5.new(self.shared_secret_value.text).digest()
             self.mutual_auth = MutualAuth(self.shared_secret_hash, self.mode)
         else:
-            print "Please enter a shared secret."
+            self.console.text = self.console.text + "\nERROR: Please enter a shared secret."
+            print "ERROR: Please enter a shared secret."
             return
-        
-        # self.mutual_auth = MutualAuth('secretsecretsecret', self.mode)
          
         if(self.mutualAuthentication()):    
             self.key_estabilshment_inprogress = False
             self.send_data_button.disabled = False
             self.send_secret_button.disabled = True
-            iVector = "aaaabbbbwwwweeee"
+
             key = md5.new(str(self.total_session_key)).digest()
-            self.cipher = CBC.generateCBC(key, iVector)
+            self.cipher = CBC.generateCBC(key)
             threading.Thread(target=self.messageReceivingService).start()
 
             if(self.mode == 'server'):
@@ -281,45 +268,45 @@ class InitScreen(FloatLayout):
         self.close_connection_button.disabled = False
 
     def sendData(self, obj):
-        #todo: encryption here?
-        plainText = self.data_to_send.text
-        cipherText = CBC.encrypt(self.cipher, plainText)
+        plaintext = self.data_to_send.text
+        ciphertext = CBC.encrypt(self.cipher, plaintext)
         self.console.text = self.console.text + '\n' + 'Text to be sent:' + self.data_to_send.text
-        hmacVal = hmac_gen.genHmac(self.shared_secret_hash, plainText)
+        hmacVal = hmac_gen.genHmac(self.shared_secret_hash, plaintext)
 
-        print "encrypted cipherText to send "+cipherText
-        print "hmac value " + hmacVal + "of type "+ str(type(hmacVal))
-        self.socket.sendall('R' + hmacVal + cipherText+"\0\0\0\0\0")
+        print "[Outgoing] encrypted ciphertext to send: " + ciphertext
+        print "[Outgoing] hmac value " + hmacVal
+        self.socket.sendall(MSG_TYPE_REGULAR + hmacVal + ciphertext + TERMINATORS)
         self.data_to_send.text = ''
 
 
     def messageReceivingService(self):
         while True:
             received = self.receiveData()
-            print "received: " + received
+            print "[Incoming] received raw message: " + received
 
             if(received[0] == MSG_TYPE_DH):
-                print "received a dh msg"
                 partial_session_key_received = int(received[1:])
                 if(self.mode == 'client'):
                     partial_session_key_generated = self.dh.partialSessionKeyGen()[0]
-                    self.socket.sendall(MSG_TYPE_DH + str(partial_session_key_generated) + '\0\0\0\0\0')
+                    self.socket.sendall(MSG_TYPE_DH + str(partial_session_key_generated) + TERMINATORS)
 
                 self.total_session_key = self.dh.computeTotalSessionKey(partial_session_key_received)
                 self.key_estabilshment_inprogress = False
             else:
-                #TODO: add stuff like HMAC, DH etc etc etc
                 received = received[1:]
 
                 # HMAC is first 16 bytes (32 hex digits)
                 receivedHmac = received[:32]
-                cipherText = received[32:]
-                print "hmac received "+ receivedHmac
-                print "cipherText received: " + cipherText
-                plainText = CBC.decrypt(self.cipher, cipherText)
-                print "plainText received: " + plainText
-                generatedHmac = hmac_gen.genHmac(self.shared_secret_hash, plainText)
-                print "hmac generated: " + generatedHmac
+                ciphertext = received[32:]
+                print "[Incoming] hmac received: "+ receivedHmac
+                print "[Incoming] ciphertext received: " + ciphertext
+
+                plaintext = CBC.decrypt(self.cipher, ciphertext)
+                print "[Incoming] plaintext decrypted: " + plaintext
+                self.console.text = self.console.text + "\nReceived: " + plaintext
+
+                generatedHmac = hmac_gen.genHmac(self.shared_secret_hash, plaintext)
+                print "[Incoming] hmac to compare with: " + generatedHmac
 
                 if(receivedHmac != generatedHmac):
                     print "ERROR: Message integrity compromised!"
@@ -330,10 +317,8 @@ class InitScreen(FloatLayout):
             if(self.key_estabilshment_inprogress):
                 continue
 
-            print "generating new session key now"
-
             partial_session_key = self.dh.partialSessionKeyGen()[0]
-            msg = MSG_TYPE_DH + str(partial_session_key) + "\0\0\0\0\0"
+            msg = MSG_TYPE_DH + str(partial_session_key) + TERMINATORS
             self.socket.sendall(msg)
             self.key_estabilshment_inprogress = True
 

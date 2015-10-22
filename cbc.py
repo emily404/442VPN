@@ -3,9 +3,9 @@ from Crypto import Random
 
 BLOCK_SIZE = 16
 
-def generateIV():
-	initializationVector = Random.new().read(BLOCK_SIZE)
-	return initializationVector
+# def generateIV():
+# 	initializationVector = Random.new().read(BLOCK_SIZE)
+# 	return initializationVector
 
 def generateKey():
 	key = Random.new().read(BLOCK_SIZE)
@@ -14,7 +14,8 @@ def generateKey():
 pad = lambda s: s + (BLOCK_SIZE - len(s) % BLOCK_SIZE) * chr(BLOCK_SIZE - len(s) % BLOCK_SIZE) 
 unpad = lambda s : s[:-ord(s[len(s)-1:])]
 
-def generateCBC(key, iv):
+def generateCBC(key):
+	iv = "aaaabbbbwwwweeee"
 	return AES.new(key, AES.MODE_CBC, iv)
 
 def encrypt(cipher, plainText):

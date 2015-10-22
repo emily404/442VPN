@@ -17,11 +17,9 @@ class MutualAuth:
         return nonce
 
     def encrypt_nonce(self, nonce_received, dh_value):
-        print "-------" + self.name + " is encrypting at time " + str(time.time())
         return self.aes.encrypt(str(self.name)+','+str(nonce_received)+','+str(dh_value))
 
     def decrypt_ciphertext(self, ciphertext):
-        print "-------" + self.name + "is decrypting at time " + str(time.time())
         return self.aes.decrypt(ciphertext)
 
     def check_name(self, plaintext):   
