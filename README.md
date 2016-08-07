@@ -1,4 +1,4 @@
-![alt tag](appScreenshot.jpg/?raw=true)
+<img src="appScreenshot.jpg" width="400" />
 
 Requirement
 
