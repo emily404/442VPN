@@ -1,30 +1,27 @@
+**Introduction**
+
+The chat app utilizes TCP/IP together with Diffie-Hellman mutual authentication protocol and md5 HMAC for message integrity. Diffie-Hellman was also chosen for establishing session key for perfect forward secrecy. The integrity-protection in the app utilizes a md5 hash which hashes our message using the pre-established shared secret. The receiver checks the decrypted message against the HMAC to detect alteration on the message.
+
 <img src="appScreenshot.jpg" width="400" />
 
-Requirement
+**Requirement**
 
 - Python 2.7
 - kivy 1.9.0
 - pycrypto
 
-Usage
+**Run from command line**
 
-To run the program
 >> python main.py
 
-Running
+**Usage**
 
-Run one instance of program, program is default to server mode
-click Open Connection button and type in a port number
+- Run server instance, the default is in server mode. Click Open Connection button and type in a listening port number.
+- Run another instance as client, click Client button to change to client mode. Click Open Connection button and type in respective host and port to connect to server.
+- Enter shared secret value into client and click Use Secret button
+- Enter shared secret value into server and click Use Secret button
+- The server and client should now be mutually authenticated.
+- Type in message to send between client and server, the message exchanged is displayed in console.
+- Close client and server connection and quit program.
 
-Run another instance of the program, click client button to toggle to client mode
-click Open Connection button and type in appropriate host and port to connect to server
 
-Enter shared secret value into client and click Use Secret button
-Enter shared secret value into server and click Use Secret button
-
-The server and client should be mutually authenticated now and the send data button changes from diasbled to enabled
-
-Type in message to send between client and server, the message exchanged is displayed in console
-
-Client close connection and quit program
-Server close connection and quit program
